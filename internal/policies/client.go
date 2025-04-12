@@ -9,7 +9,6 @@ import (
 	"os"
 	"slices"
 
-	logconfig "github.com/kubewarden/audit-scanner/internal/log"
 	policiesv1 "github.com/kubewarden/kubewarden-controller/api/policies/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -30,6 +29,8 @@ type Client struct {
 	// FQDN of the policy server to query. If not empty, it will query on port 3000.
 	// Useful for out-of-cluster debugging
 	policyServerURL string
+	// logger is used to log the messages
+	logger *slog.Logger
 }
 
 // Policies represents a collection of auditable policies.
@@ -51,15 +52,16 @@ type Policy struct {
 }
 
 // NewClient returns a policy Client.
-func NewClient(client client.Client, kubewardenNamespace string, policyServerURL string) (*Client, error) {
+func NewClient(client client.Client, kubewardenNamespace string, policyServerURL string, logger *slog.Logger) (*Client, error) {
 	if policyServerURL != "" {
-		slog.Info(fmt.Sprintf("querying PolicyServers at %s for debugging purposes. Don't forget to start `kubectl port-forward` if needed", policyServerURL))
+		logger.Info(fmt.Sprintf("querying PolicyServers at %s for debugging purposes. Don't forget to start `kubectl port-forward` if needed", policyServerURL))
 	}
 
 	return &Client{
 		client:              client,
 		kubewardenNamespace: kubewardenNamespace,
 		policyServerURL:     policyServerURL,
+		logger:              logger.With("client", "policyclient"),
 	}, nil
 }
 
@@ -245,7 +247,7 @@ func (f *Client) groupPoliciesByGVR(ctx context.Context, policies []policiesv1.P
 		rules := filterWildcardRules(policy.GetRules())
 		if len(rules) == 0 {
 			skippedPolicies[policy.GetUniqueName()] = struct{}{}
-			slog.Debug("the policy targets only wildcard resources, skipping...", slog.String("policy", policy.GetUniqueName()))
+			f.logger.Debug("the policy targets only wildcard resources, skipping...", slog.String("policy", policy.GetUniqueName()))
 
 			continue
 		}
@@ -253,7 +255,7 @@ func (f *Client) groupPoliciesByGVR(ctx context.Context, policies []policiesv1.P
 		rules = filterNonCreateOperations(rules)
 		if len(rules) == 0 {
 			skippedPolicies[policy.GetUniqueName()] = struct{}{}
-			slog.Debug("the policy does not have rules with a CREATE operation, skipping...", slog.String("policy", policy.GetUniqueName()))
+			f.logger.Debug("the policy does not have rules with a CREATE operation, skipping...", slog.String("policy", policy.GetUniqueName()))
 
 			continue
 		}
@@ -261,14 +263,14 @@ func (f *Client) groupPoliciesByGVR(ctx context.Context, policies []policiesv1.P
 		groupVersionResources, err := f.getGroupVersionResources(rules, namespaced)
 		if err != nil {
 			erroredPolicies[policy.GetUniqueName()] = struct{}{}
-			slog.Error("failed to obtain unknown GroupVersion resources. The policy may be misconfigured, skipping as error...",
+			f.logger.Error("failed to obtain unknown GroupVersion resources. The policy may be misconfigured, skipping as error...",
 				slog.String("error", err.Error()),
 				slog.String("policy", policy.GetUniqueName()))
 			continue
 		}
 
 		if len(groupVersionResources) == 0 {
-			slog.Debug("the policy does not target resources within the selected scope",
+			f.logger.Debug("the policy does not target resources within the selected scope",
 				slog.String("policy", policy.GetUniqueName()),
 				slog.Bool("namespaced", namespaced))
 
@@ -277,7 +279,7 @@ func (f *Client) groupPoliciesByGVR(ctx context.Context, policies []policiesv1.P
 
 		if !policy.GetBackgroundAudit() {
 			skippedPolicies[policy.GetUniqueName()] = struct{}{}
-			slog.Debug("the policy has backgroundAudit set to false, skipping...",
+			f.logger.Debug("the policy has backgroundAudit set to false, skipping...",
 				slog.String("policy", policy.GetUniqueName()))
 
 			continue
@@ -285,7 +287,7 @@ func (f *Client) groupPoliciesByGVR(ctx context.Context, policies []policiesv1.P
 
 		if policy.GetStatus().PolicyStatus != policiesv1.PolicyStatusActive {
 			skippedPolicies[policy.GetUniqueName()] = struct{}{}
-			slog.Debug("the policy is not active, skipping...", slog.String("policy", policy.GetUniqueName()))
+			f.logger.Debug("the policy is not active, skipping...", slog.String("policy", policy.GetUniqueName()))
 
 			continue
 		}
@@ -293,7 +295,7 @@ func (f *Client) groupPoliciesByGVR(ctx context.Context, policies []policiesv1.P
 		url, err := f.getPolicyServerURLRunningPolicy(ctx, policy)
 		if err != nil {
 			erroredPolicies[policy.GetUniqueName()] = struct{}{}
-			slog.Error("failed to obtain matching policy-server URL, skipping as error...",
+			f.logger.Error("failed to obtain matching policy-server URL, skipping as error...",
 				slog.String("error", err.Error()),
 				slog.String("policy", policy.GetUniqueName()))
 			continue
@@ -402,8 +404,8 @@ func (f *Client) getPolicyServerURLRunningPolicy(ctx context.Context, policy pol
 	if f.policyServerURL != "" {
 		url, err := url.Parse(f.policyServerURL)
 		if err != nil {
-			slog.Log(context.Background(), logconfig.LevelFatal, "incorrect URL for policy-server")
-			os.Exit(1)
+			f.logger.Error("incorrect URL for policy-server")
+			os.Exit(1) // TODO: is it OK to exit here when using Error instead of Fatal?
 		}
 		urlStr = fmt.Sprintf("%s/audit/%s", url, policy.GetUniqueName())
 	} else {

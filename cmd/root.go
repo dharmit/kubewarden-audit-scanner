@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log" //nolint:depguard // ignore depguard for this file
 	"log/slog"
 	"os"
 
@@ -31,12 +32,11 @@ const (
 //nolint:gocognit,funlen // This function is the CLI entrypoint and it's expected to be long.
 func NewRootCommand() *cobra.Command {
 	var (
-		level        string       // log level.
-		outputScan   bool         // print result of scan as JSON to stdout.
-		skippedNs    []string     // list of namespaces to be skipped from scan.
-		insecureSSL  bool         // skip SSL cert validation when connecting to PolicyServers endpoints.
-		disableStore bool         // disable storing the results in the k8s cluster.
-		slogger      *slog.Logger // slog based logger to be used
+		level        string   // log level.
+		outputScan   bool     // print result of scan as JSON to stdout.
+		skippedNs    []string // list of namespaces to be skipped from scan.
+		insecureSSL  bool     // skip SSL cert validation when connecting to PolicyServers endpoints.
+		disableStore bool     // disable storing the results in the k8s cluster.
 	)
 
 	// rootCmd represents the base command when called without any subcommands.
@@ -52,8 +52,7 @@ There will be a ClusterPolicyReport with results for cluster-wide resources.`,
 			if err != nil {
 				return err
 			}
-			slogger = slog.New(logconfig.NewSlogger(os.Stdout, level))
-			slog.SetDefault(slogger)
+			logger := slog.New(logconfig.NewHandler(os.Stdout, level))
 
 			kubewardenNamespace, err := cmd.Flags().GetString("kubewarden-namespace")
 			if err != nil {
@@ -108,15 +107,15 @@ There will be a ClusterPolicyReport with results for cluster-wide resources.`,
 			if err != nil {
 				return err
 			}
-			policiesClient, err := policies.NewClient(client, kubewardenNamespace, policyServerURL)
+			policiesClient, err := policies.NewClient(client, kubewardenNamespace, policyServerURL, logger)
 			if err != nil {
 				return err
 			}
-			k8sClient, err := k8s.NewClient(dynamicClient, clientset, kubewardenNamespace, skippedNs, int64(pageSize))
+			k8sClient, err := k8s.NewClient(dynamicClient, clientset, kubewardenNamespace, skippedNs, int64(pageSize), logger)
 			if err != nil {
 				return err
 			}
-			policyReportStore := report.NewPolicyReportStore(client)
+			policyReportStore := report.NewPolicyReportStore(client, logger)
 
 			scannerConfig := scanner.Config{
 				PoliciesClient:    policiesClient,
@@ -135,6 +134,7 @@ There will be a ClusterPolicyReport with results for cluster-wide resources.`,
 				},
 				OutputScan:   outputScan,
 				DisableStore: disableStore,
+				Logger:       logger.With("component", "scanner"),
 			}
 
 			scanner, err := scanner.NewScanner(scannerConfig)
@@ -153,7 +153,7 @@ There will be a ClusterPolicyReport with results for cluster-wide resources.`,
 	rootCmd.Flags().BoolP("cluster", "c", false, "scan cluster wide resources")
 	rootCmd.Flags().StringP("kubewarden-namespace", "k", defaultKubewardenNamespace, "namespace where the Kubewarden components (e.g. PolicyServer) are installed (required)")
 	rootCmd.Flags().StringP("policy-server-url", "u", "", "URI to the PolicyServers the Audit Scanner will query. Example: https://localhost:3000. Useful for out-of-cluster debugging")
-	rootCmd.Flags().StringP(level, "loglevel", "l", fmt.Sprintf("level of the logs. Supported values are: %v", logconfig.GetSupportedValues()))
+	rootCmd.Flags().StringVarP(&level, "loglevel", "l", "", fmt.Sprintf("level of the logs. Supported values are: %v", logconfig.SupportedLogLevels()))
 	rootCmd.Flags().BoolVarP(&outputScan, "output-scan", "o", false, "print result of scan in JSON to stdout")
 	rootCmd.Flags().StringSliceVarP(&skippedNs, "ignore-namespaces", "i", nil, "comma separated list of namespace names to be skipped from scan. This flag can be repeated")
 	rootCmd.Flags().BoolVar(&insecureSSL, "insecure-ssl", false, "skip SSL cert validation when connecting to PolicyServers endpoints. Useful for development")
@@ -174,15 +174,13 @@ There will be a ClusterPolicyReport with results for cluster-wide resources.`,
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute(rootCmd *cobra.Command) {
 	if err := rootCmd.Execute(); err != nil {
-		slog.Log(context.Background(), logconfig.LevelFatal, "Error on cmd.Execute()", "error", err)
-		os.Exit(1)
+		log.Fatalf("Error on cmd.Execute(): %s", err.Error())
 	}
 }
 
 func startScanner(namespace string, clusterWide bool, scanner *scanner.Scanner) error {
 	if clusterWide && namespace != "" {
-		slog.Log(context.Background(), logconfig.LevelFatal, "Cannot scan cluster wide and only a namespace at the same time")
-		os.Exit(1)
+		log.Fatal("Cannot scan cluster wide and only a namespace at the same time")
 	}
 
 	runUID := uuid.New().String()

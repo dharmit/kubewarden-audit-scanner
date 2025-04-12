@@ -17,12 +17,15 @@ import (
 type PolicyReportStore struct {
 	// client is a controller-runtime client that knows about PolicyReport and ClusterPolicyReport CRDs
 	client client.Client
+	// logger is used to log the messages
+	logger *slog.Logger
 }
 
 // NewPolicyReportStore creates a new PolicyReportStore.
-func NewPolicyReportStore(client client.Client) *PolicyReportStore {
+func NewPolicyReportStore(client client.Client, logger *slog.Logger) *PolicyReportStore {
 	return &PolicyReportStore{
 		client: client,
+		logger: logger.With("component", "policyreportstore"),
 	}
 }
 
@@ -46,7 +49,7 @@ func (s *PolicyReportStore) CreateOrPatchPolicyReport(ctx context.Context, polic
 		return err
 	}
 
-	slog.Debug(fmt.Sprintf("PolicyReport %s", operation),
+	s.logger.Debug(fmt.Sprintf("PolicyReport %s", operation),
 		slog.Group("dict",
 			slog.String("report-name", policyReport.GetName()),
 			slog.String("report-version", policyReport.GetResourceVersion()),
@@ -62,7 +65,7 @@ func (s *PolicyReportStore) DeleteOldPolicyReports(ctx context.Context, scanRunI
 	if err != nil {
 		return err
 	}
-	slog.Debug("Deleting old PolicyReports", slog.String("labelSelector", labelSelector.String()))
+	s.logger.Debug("Deleting old PolicyReports", slog.String("labelSelector", labelSelector.String()))
 
 	return s.client.DeleteAllOf(ctx, &wgpolicy.PolicyReport{}, &client.DeleteAllOfOptions{ListOptions: client.ListOptions{
 		LabelSelector: labelSelector,
@@ -89,7 +92,7 @@ func (s *PolicyReportStore) CreateOrPatchClusterPolicyReport(ctx context.Context
 		return err
 	}
 
-	slog.Debug(fmt.Sprintf("ClusterPolicyReport %s", operation),
+	s.logger.Debug(fmt.Sprintf("ClusterPolicyReport %s", operation),
 		slog.Group("dict",
 			slog.String("report-name", clusterPolicyReport.GetName()),
 			slog.String("report-version", clusterPolicyReport.GetResourceVersion()),
@@ -105,7 +108,7 @@ func (s *PolicyReportStore) DeleteOldClusterPolicyReports(ctx context.Context, s
 	if err != nil {
 		return err
 	}
-	slog.Debug("Deleting old ClusterPolicyReports", slog.String("labelSelector", labelSelector.String()))
+	s.logger.Debug("Deleting old ClusterPolicyReports", slog.String("labelSelector", labelSelector.String()))
 
 	return s.client.DeleteAllOf(ctx, &wgpolicy.ClusterPolicyReport{}, &client.DeleteAllOfOptions{ListOptions: client.ListOptions{
 		LabelSelector: labelSelector,

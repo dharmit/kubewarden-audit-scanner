@@ -3,8 +3,11 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
 	"testing"
 
+	logconfig "github.com/kubewarden/audit-scanner/internal/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -28,7 +31,8 @@ func TestGetResources(t *testing.T) {
 	dynamicClient := dynamicFake.NewSimpleDynamicClient(scheme.Scheme, pods...)
 	clientset := fake.NewSimpleClientset()
 
-	k8sClient, err := NewClient(dynamicClient, clientset, "kubewarden", nil, pageSize)
+	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	k8sClient, err := NewClient(dynamicClient, clientset, "kubewarden", nil, pageSize, logger)
 	require.NoError(t, err)
 
 	pager, err := k8sClient.GetResources(schema.GroupVersionResource{

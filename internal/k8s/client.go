@@ -27,10 +27,12 @@ type Client struct {
 	skippedNs []string
 	// pageSize is the number of resources to fetch when paginating
 	pageSize int64
+	// logger is used to log the messages
+	logger *slog.Logger
 }
 
 // NewClient returns a new client.
-func NewClient(dynamicClient dynamic.Interface, clientset kubernetes.Interface, kubewardenNamespace string, skippedNs []string, pageSize int64) (*Client, error) {
+func NewClient(dynamicClient dynamic.Interface, clientset kubernetes.Interface, kubewardenNamespace string, skippedNs []string, pageSize int64, logger *slog.Logger) (*Client, error) {
 	skippedNs = append(skippedNs, kubewardenNamespace)
 
 	return &Client{
@@ -38,6 +40,7 @@ func NewClient(dynamicClient dynamic.Interface, clientset kubernetes.Interface, 
 		clientset,
 		skippedNs,
 		pageSize,
+		logger.With("component", "kubernetesclient"),
 	}, nil
 }
 
@@ -50,14 +53,14 @@ func (f *Client) GetResources(gvr schema.GroupVersionResource, nsName string) (*
 
 		resources, err := f.listResources(ctx, gvr, nsName, opts)
 		if apimachineryerrors.IsNotFound(err) {
-			slog.Warn("API resource not found",
+			f.logger.Warn("API resource not found",
 				slog.Group("dict",
 					slog.String("resource-GVK", gvr.String()),
 					slog.String("ns", nsName)))
 		}
 		if apimachineryerrors.IsForbidden(err) {
 			// ServiceAccount lacks permissions, GVK may not exist, or policies may be misconfigured
-			slog.Warn("API resource forbidden, unknown GVK or ServiceAccount lacks permissions",
+			f.logger.Warn("API resource forbidden, unknown GVK or ServiceAccount lacks permissions",
 				slog.Group("dict",
 					slog.String("resource-GVK", gvr.String()),
 					slog.String("ns", nsName)))
@@ -94,7 +97,7 @@ func (f *Client) GetAuditedNamespaces(ctx context.Context) (*corev1.NamespaceLis
 	skipNsFields := fields.Everything()
 	for _, nsName := range f.skippedNs {
 		skipNsFields = fields.AndSelectors(skipNsFields, fields.OneTermNotEqualSelector("metadata.name", nsName))
-		slog.Debug("skipping ns", slog.String("ns", nsName))
+		f.logger.Debug("skipping ns", slog.String("ns", nsName))
 	}
 
 	namespaceList, err := f.clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{FieldSelector: skipNsFields.String()})

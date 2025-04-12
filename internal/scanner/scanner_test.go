@@ -8,11 +8,13 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/google/uuid"
 	auditConstants "github.com/kubewarden/audit-scanner/internal/constants"
 	"github.com/kubewarden/audit-scanner/internal/k8s"
+	logconfig "github.com/kubewarden/audit-scanner/internal/log"
 	"github.com/kubewarden/audit-scanner/internal/policies"
 	"github.com/kubewarden/audit-scanner/internal/report"
 	auditscheme "github.com/kubewarden/audit-scanner/internal/scheme"
@@ -52,6 +54,7 @@ func newTestConfig(policiesClient *policies.Client, k8sClient *k8s.Client, polic
 		},
 		OutputScan:   false,
 		DisableStore: false,
+		Logger:       slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString)),
 	}
 }
 
@@ -380,13 +383,14 @@ func TestScanAllNamespaces(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	k8sClient, err := k8s.NewClient(dynamicClient, clientset, "kubewarden", nil, pageSize)
+	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	k8sClient, err := k8s.NewClient(dynamicClient, clientset, "kubewarden", nil, pageSize, logger)
 	require.NoError(t, err)
 
-	policiesClient, err := policies.NewClient(client, "kubewarden", mockPolicyServer.URL)
+	policiesClient, err := policies.NewClient(client, "kubewarden", mockPolicyServer.URL, logger)
 	require.NoError(t, err)
 
-	policyReportStore := report.NewPolicyReportStore(client)
+	policyReportStore := report.NewPolicyReportStore(client, logger)
 
 	config := newTestConfig(policiesClient, k8sClient, policyReportStore)
 	scanner, err := NewScanner(config)
@@ -586,13 +590,14 @@ func TestScanClusterWideResources(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	k8sClient, err := k8s.NewClient(dynamicClient, clientset, "kubewarden", nil, pageSize)
+	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	k8sClient, err := k8s.NewClient(dynamicClient, clientset, "kubewarden", nil, pageSize, logger)
 	require.NoError(t, err)
 
-	policiesClient, err := policies.NewClient(client, "kubewarden", mockPolicyServer.URL)
+	policiesClient, err := policies.NewClient(client, "kubewarden", mockPolicyServer.URL, logger)
 	require.NoError(t, err)
 
-	policyReportStore := report.NewPolicyReportStore(client)
+	policyReportStore := report.NewPolicyReportStore(client, logger)
 
 	config := newTestConfig(policiesClient, k8sClient, policyReportStore)
 	scanner, err := NewScanner(config)
@@ -697,13 +702,14 @@ func TestScanWithHTTPErrors(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	k8sClient, err := k8s.NewClient(dynamicClient, clientset, "kubewarden", nil, pageSize)
+	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	k8sClient, err := k8s.NewClient(dynamicClient, clientset, "kubewarden", nil, pageSize, logger)
 	require.NoError(t, err)
 
-	policiesClient, err := policies.NewClient(client, "kubewarden", mockPolicyServerWithErrors.URL)
+	policiesClient, err := policies.NewClient(client, "kubewarden", mockPolicyServerWithErrors.URL, logger)
 	require.NoError(t, err)
 
-	policyReportStore := report.NewPolicyReportStore(client)
+	policyReportStore := report.NewPolicyReportStore(client, logger)
 
 	config := newTestConfig(policiesClient, k8sClient, policyReportStore)
 	scanner, err := NewScanner(config)
@@ -821,13 +827,14 @@ func TestScanWithMTLS(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	k8sClient, err := k8s.NewClient(dynamicClient, clientset, "kubewarden", nil, pageSize)
+	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	k8sClient, err := k8s.NewClient(dynamicClient, clientset, "kubewarden", nil, pageSize, logger)
 	require.NoError(t, err)
 
-	policiesClient, err := policies.NewClient(client, "kubewarden", mockPolicyServer.URL)
+	policiesClient, err := policies.NewClient(client, "kubewarden", mockPolicyServer.URL, logger)
 	require.NoError(t, err)
 
-	policyReportStore := report.NewPolicyReportStore(client)
+	policyReportStore := report.NewPolicyReportStore(client, logger)
 
 	config := newTestConfig(policiesClient, k8sClient, policyReportStore)
 	config.TLS = TLSConfig{
@@ -846,7 +853,7 @@ func TestScanWithMTLS(t *testing.T) {
 	err = client.Get(context.TODO(), types.NamespacedName{Name: string(pod.GetUID()), Namespace: "namespace"}, &podPolicyReport)
 	require.NoError(t, err)
 
-	slog.Debug("podPolicyReport",
+	logger.Debug("podPolicyReport",
 		slog.Any("podPolicyReport", podPolicyReport))
 
 	assert.Equal(t, 1, podPolicyReport.Summary.Pass)
