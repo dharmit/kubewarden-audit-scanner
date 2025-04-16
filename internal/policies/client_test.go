@@ -4,10 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"net/url"
-	"os"
 	"testing"
 
-	logconfig "github.com/kubewarden/audit-scanner/internal/log"
 	"github.com/kubewarden/audit-scanner/internal/testutils"
 	policiesv1 "github.com/kubewarden/kubewarden-controller/api/policies/v1"
 	"github.com/stretchr/testify/assert"
@@ -260,7 +258,7 @@ func TestGetPoliciesByNamespace(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	logger := slog.Default()
 	policiesClient, err := NewClient(client, "kubewarden", "", logger)
 	require.NoError(t, err)
 
@@ -471,7 +469,7 @@ func TestGetClusterWidePolicies(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	logger := slog.Default()
 	policiesClient, err := NewClient(client, "kubewarden", "", logger)
 	require.NoError(t, err)
 

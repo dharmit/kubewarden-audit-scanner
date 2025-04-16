@@ -4,11 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"testing"
 
 	auditConstants "github.com/kubewarden/audit-scanner/internal/constants"
-	logconfig "github.com/kubewarden/audit-scanner/internal/log"
 	testutils "github.com/kubewarden/audit-scanner/internal/testutils"
 	policiesv1 "github.com/kubewarden/kubewarden-controller/api/policies/v1"
 	"github.com/stretchr/testify/require"
@@ -24,7 +22,7 @@ import (
 func TestCreatePolicyReport(t *testing.T) {
 	fakeClient, err := testutils.NewFakeClient()
 	require.NoError(t, err)
-	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	logger := slog.Default()
 	store := NewPolicyReportStore(fakeClient, logger)
 
 	resource := unstructured.Unstructured{}
@@ -53,7 +51,7 @@ func TestCreatePolicyReport(t *testing.T) {
 func TestPatchPolicyReport(t *testing.T) {
 	fakeClient, err := testutils.NewFakeClient()
 	require.NoError(t, err)
-	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	logger := slog.Default()
 	store := NewPolicyReportStore(fakeClient, logger)
 
 	resource := unstructured.Unstructured{}
@@ -104,7 +102,7 @@ func TestPatchPolicyReport(t *testing.T) {
 func TestCreateClusterPolicyReport(t *testing.T) {
 	fakeClient, err := testutils.NewFakeClient()
 	require.NoError(t, err)
-	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	logger := slog.Default()
 	store := NewPolicyReportStore(fakeClient, logger)
 
 	resource := unstructured.Unstructured{}
@@ -132,7 +130,7 @@ func TestCreateClusterPolicyReport(t *testing.T) {
 func TestPatchClusterPolicyReport(t *testing.T) {
 	fakeClient, err := testutils.NewFakeClient()
 	require.NoError(t, err)
-	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	logger := slog.Default()
 	store := NewPolicyReportStore(fakeClient, logger)
 
 	resource := unstructured.Unstructured{}
@@ -190,7 +188,7 @@ func TestDeletePolicyReport(t *testing.T) {
 
 	fakeClient, err := testutils.NewFakeClient(oldPolicyReport, otherOldPolicyReport, newPolicyReport, oldPolicyReportOtheNamespace)
 	require.NoError(t, err)
-	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	logger := slog.Default()
 	store := NewPolicyReportStore(fakeClient, logger)
 
 	err = store.DeleteOldPolicyReports(context.Background(), "new-uid", "default")
@@ -225,7 +223,7 @@ func TestDeleteClusterPolicyReport(t *testing.T) {
 		Name("new-report").WithAppLabel().RunUID("new-uid").Build()
 	fakeClient, err := testutils.NewFakeClient(oldPolicyReport, otherOldPolicyReport, newPolicyReport)
 	require.NoError(t, err)
-	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	logger := slog.Default()
 	store := NewPolicyReportStore(fakeClient, logger)
 
 	err = store.DeleteOldClusterPolicyReports(context.Background(), "new-uid")

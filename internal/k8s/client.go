@@ -53,14 +53,14 @@ func (f *Client) GetResources(gvr schema.GroupVersionResource, nsName string) (*
 
 		resources, err := f.listResources(ctx, gvr, nsName, opts)
 		if apimachineryerrors.IsNotFound(err) {
-			f.logger.Warn("API resource not found",
+			f.logger.WarnContext(context.Background(), "API resource not found",
 				slog.Group("dict",
 					slog.String("resource-GVK", gvr.String()),
 					slog.String("ns", nsName)))
 		}
 		if apimachineryerrors.IsForbidden(err) {
 			// ServiceAccount lacks permissions, GVK may not exist, or policies may be misconfigured
-			f.logger.Warn("API resource forbidden, unknown GVK or ServiceAccount lacks permissions",
+			f.logger.WarnContext(context.Background(), "API resource forbidden, unknown GVK or ServiceAccount lacks permissions",
 				slog.Group("dict",
 					slog.String("resource-GVK", gvr.String()),
 					slog.String("ns", nsName)))
@@ -97,7 +97,7 @@ func (f *Client) GetAuditedNamespaces(ctx context.Context) (*corev1.NamespaceLis
 	skipNsFields := fields.Everything()
 	for _, nsName := range f.skippedNs {
 		skipNsFields = fields.AndSelectors(skipNsFields, fields.OneTermNotEqualSelector("metadata.name", nsName))
-		f.logger.Debug("skipping ns", slog.String("ns", nsName))
+		f.logger.DebugContext(context.Background(), "skipping ns", slog.String("ns", nsName))
 	}
 
 	namespaceList, err := f.clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{FieldSelector: skipNsFields.String()})

@@ -8,13 +8,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/google/uuid"
 	auditConstants "github.com/kubewarden/audit-scanner/internal/constants"
 	"github.com/kubewarden/audit-scanner/internal/k8s"
-	logconfig "github.com/kubewarden/audit-scanner/internal/log"
 	"github.com/kubewarden/audit-scanner/internal/policies"
 	"github.com/kubewarden/audit-scanner/internal/report"
 	auditscheme "github.com/kubewarden/audit-scanner/internal/scheme"
@@ -54,7 +52,7 @@ func newTestConfig(policiesClient *policies.Client, k8sClient *k8s.Client, polic
 		},
 		OutputScan:   false,
 		DisableStore: false,
-		Logger:       slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString)),
+		Logger:       slog.Default(),
 	}
 }
 
@@ -383,7 +381,7 @@ func TestScanAllNamespaces(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	logger := slog.Default()
 	k8sClient, err := k8s.NewClient(dynamicClient, clientset, "kubewarden", nil, pageSize, logger)
 	require.NoError(t, err)
 
@@ -590,7 +588,7 @@ func TestScanClusterWideResources(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	logger := slog.Default()
 	k8sClient, err := k8s.NewClient(dynamicClient, clientset, "kubewarden", nil, pageSize, logger)
 	require.NoError(t, err)
 
@@ -702,7 +700,7 @@ func TestScanWithHTTPErrors(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	logger := slog.Default()
 	k8sClient, err := k8s.NewClient(dynamicClient, clientset, "kubewarden", nil, pageSize, logger)
 	require.NoError(t, err)
 
@@ -827,7 +825,7 @@ func TestScanWithMTLS(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	logger := slog.New(logconfig.NewHandler(os.Stdout, logconfig.LevelDebugString))
+	logger := slog.Default()
 	k8sClient, err := k8s.NewClient(dynamicClient, clientset, "kubewarden", nil, pageSize, logger)
 	require.NoError(t, err)
 
