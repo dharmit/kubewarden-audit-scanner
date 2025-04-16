@@ -49,7 +49,7 @@ func (s *PolicyReportStore) CreateOrPatchPolicyReport(ctx context.Context, polic
 		return err
 	}
 
-	s.logger.DebugContext(context.Background(), fmt.Sprintf("PolicyReport %s", operation),
+	s.logger.DebugContext(ctx, fmt.Sprintf("PolicyReport %s", operation),
 		slog.Group("dict",
 			slog.String("report-name", policyReport.GetName()),
 			slog.String("report-version", policyReport.GetResourceVersion()),
@@ -65,7 +65,7 @@ func (s *PolicyReportStore) DeleteOldPolicyReports(ctx context.Context, scanRunI
 	if err != nil {
 		return err
 	}
-	s.logger.DebugContext(context.Background(), "Deleting old PolicyReports", slog.String("labelSelector", labelSelector.String()))
+	s.logger.DebugContext(ctx, "Deleting old PolicyReports", slog.String("labelSelector", labelSelector.String()))
 
 	return s.client.DeleteAllOf(ctx, &wgpolicy.PolicyReport{}, &client.DeleteAllOfOptions{ListOptions: client.ListOptions{
 		LabelSelector: labelSelector,
@@ -92,7 +92,7 @@ func (s *PolicyReportStore) CreateOrPatchClusterPolicyReport(ctx context.Context
 		return err
 	}
 
-	s.logger.DebugContext(context.Background(), fmt.Sprintf("ClusterPolicyReport %s", operation),
+	s.logger.DebugContext(ctx, fmt.Sprintf("ClusterPolicyReport %s", operation),
 		slog.Group("dict",
 			slog.String("report-name", clusterPolicyReport.GetName()),
 			slog.String("report-version", clusterPolicyReport.GetResourceVersion()),
@@ -108,7 +108,7 @@ func (s *PolicyReportStore) DeleteOldClusterPolicyReports(ctx context.Context, s
 	if err != nil {
 		return err
 	}
-	s.logger.DebugContext(context.Background(), "Deleting old ClusterPolicyReports", slog.String("labelSelector", labelSelector.String()))
+	s.logger.DebugContext(ctx, "Deleting old ClusterPolicyReports", slog.String("labelSelector", labelSelector.String()))
 
 	return s.client.DeleteAllOf(ctx, &wgpolicy.ClusterPolicyReport{}, &client.DeleteAllOfOptions{ListOptions: client.ListOptions{
 		LabelSelector: labelSelector,

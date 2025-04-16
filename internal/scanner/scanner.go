@@ -71,7 +71,7 @@ func NewScanner(config Config) (*Scanner, error) {
 		if ok := rootCAs.AppendCertsFromPEM(caCert); !ok {
 			return nil, errors.New("failed to append cert to in-app RootCAs trust store")
 		}
-		logger.DebugContext(context.Background(), "appended cert file to in-app RootCAs trust store", slog.String("ca-cert", config.TLS.CAFile))
+		logger.Debug("appended cert file to in-app RootCAs trust store", slog.String("ca-cert", config.TLS.CAFile))
 	}
 
 	tlsConfig.RootCAs = rootCAs
@@ -81,7 +81,7 @@ func NewScanner(config Config) (*Scanner, error) {
 		if err != nil {
 			return nil, fmt.Errorf("loading client certificate: %w", err)
 		}
-		logger.DebugContext(context.Background(), "appended cert file to in-app RootCAs trust store",
+		logger.Debug("appended cert file to in-app RootCAs trust store",
 			slog.String("client-cert", config.TLS.ClientCertFile),
 			slog.String("client-key", config.TLS.ClientKeyFile))
 
@@ -89,7 +89,7 @@ func NewScanner(config Config) (*Scanner, error) {
 	}
 
 	if config.TLS.Insecure {
-		logger.WarnContext(context.Background(), "connecting to PolicyServers endpoints without validating TLS connection")
+		logger.Warn("connecting to PolicyServers endpoints without validating TLS connection")
 	}
 	tlsConfig.InsecureSkipVerify = config.TLS.Insecure
 
@@ -130,7 +130,7 @@ func NewScanner(config Config) (*Scanner, error) {
 // logs them if there's a problem auditing the resource of saving the Report or
 // Result, so it can continue with the next audit, or next Result.
 func (s *Scanner) ScanNamespace(ctx context.Context, nsName, runUID string) error {
-	s.logger.InfoContext(context.Background(), "namespace scan started",
+	s.logger.InfoContext(ctx, "namespace scan started",
 		slog.Group("dict",
 			slog.String("namespace", nsName),
 			slog.String("RunUID", runUID),
@@ -144,13 +144,13 @@ func (s *Scanner) ScanNamespace(ctx context.Context, nsName, runUID string) erro
 	}
 	policies, err := s.policiesClient.GetPoliciesByNamespace(ctx, namespace)
 	if err != nil {
-		s.logger.ErrorContext(context.Background(), "failed to obtain auditable policies",
+		s.logger.ErrorContext(ctx, "failed to obtain auditable policies",
 			slog.String("error", err.Error()),
 			slog.String("namespace", nsName))
 		return err
 	}
 
-	s.logger.InfoContext(context.Background(), "policy count",
+	s.logger.InfoContext(ctx, "policy count",
 		slog.String("namespace", nsName),
 		slog.Group("dict"),
 		slog.Int("policies-to-evaluate", policies.PolicyNum),
@@ -160,7 +160,7 @@ func (s *Scanner) ScanNamespace(ctx context.Context, nsName, runUID string) erro
 	for gvr, pols := range policies.PoliciesByGVR {
 		pager, err := s.k8sClient.GetResources(gvr, nsName)
 		if err != nil {
-			s.logger.ErrorContext(context.Background(), "failed to get resources",
+			s.logger.ErrorContext(ctx, "failed to get resources",
 				slog.String("error", err.Error()),
 				slog.String("gvr", gvr.String()),
 				slog.String("ns", nsName))
@@ -184,7 +184,7 @@ func (s *Scanner) ScanNamespace(ctx context.Context, nsName, runUID string) erro
 				defer workers.Done()
 
 				if err := s.auditResource(ctx, policiesToAudit, *resource, runUID, policies.SkippedNum, policies.ErroredNum); err != nil {
-					s.logger.ErrorContext(context.Background(), "error auditing resource",
+					s.logger.ErrorContext(ctx, "error auditing resource",
 						slog.String("error", err.Error()),
 						slog.String("RunUID", runUID))
 				}
@@ -197,11 +197,11 @@ func (s *Scanner) ScanNamespace(ctx context.Context, nsName, runUID string) erro
 	}
 	workers.Wait()
 	if err := s.policyReportStore.DeleteOldPolicyReports(ctx, runUID, nsName); err != nil {
-		s.logger.ErrorContext(context.Background(), "error deleting old PolicyReports",
+		s.logger.ErrorContext(ctx, "error deleting old PolicyReports",
 			slog.String("error", err.Error()),
 			slog.String("RunUID", runUID))
 	}
-	s.logger.InfoContext(context.Background(), "Namespaced resources scan finished")
+	s.logger.InfoContext(ctx, "Namespaced resources scan finished")
 	return nil
 }
 
@@ -210,12 +210,12 @@ func (s *Scanner) ScanNamespace(ctx context.Context, nsName, runUID string) erro
 // logs them if there's a problem auditing the resource of saving the Report or
 // Result, so it can continue with the next audit, or next Result.
 func (s *Scanner) ScanAllNamespaces(ctx context.Context, runUID string) error {
-	s.logger.InfoContext(context.Background(), "all-namespaces scan started",
+	s.logger.InfoContext(ctx, "all-namespaces scan started",
 		slog.Group("dict",
 			slog.Int("parallel-namespaces-audits", s.parallelNamespacesAudits)))
 	nsList, err := s.k8sClient.GetAuditedNamespaces(ctx)
 	if err != nil {
-		s.logger.ErrorContext(context.Background(), "error scanning all namespaces", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "error scanning all namespaces", slog.String("error", err.Error()))
 	}
 	semaphore := semaphore.NewWeighted(int64(s.parallelNamespacesAudits))
 	var workers sync.WaitGroup
@@ -233,14 +233,14 @@ func (s *Scanner) ScanAllNamespaces(ctx context.Context, runUID string) error {
 			defer workers.Done()
 
 			if e := s.ScanNamespace(ctx, namespaceName, runUID); e != nil {
-				s.logger.ErrorContext(context.Background(), "error scanning namespace", slog.String("error", err.Error()), slog.String("ns", namespaceName))
+				s.logger.ErrorContext(ctx, "error scanning namespace", slog.String("error", err.Error()), slog.String("ns", namespaceName))
 				err = errors.Join(err, e)
 			}
 		}()
 	}
 	workers.Wait()
 
-	s.logger.InfoContext(context.Background(), "all-namespaces scan finished")
+	s.logger.InfoContext(ctx, "all-namespaces scan finished")
 
 	return err
 }
@@ -250,7 +250,7 @@ func (s *Scanner) ScanAllNamespaces(ctx context.Context, runUID string) error {
 // logs them if there's a problem auditing the resource of saving the Report or
 // Result, so it can continue with the next audit, or next Result.
 func (s *Scanner) ScanClusterWideResources(ctx context.Context, runUID string) error {
-	s.logger.InfoContext(context.Background(), "clusterwide resources scan started", slog.String("RunUID", runUID))
+	s.logger.InfoContext(ctx, "clusterwide resources scan started", slog.String("RunUID", runUID))
 
 	semaphore := semaphore.NewWeighted(int64(s.parallelResourcesAudits))
 	var workers sync.WaitGroup
@@ -260,7 +260,7 @@ func (s *Scanner) ScanClusterWideResources(ctx context.Context, runUID string) e
 		return err
 	}
 
-	s.logger.InfoContext(context.Background(), "cluster admission policies count",
+	s.logger.InfoContext(ctx, "cluster admission policies count",
 		slog.Group("dict",
 			slog.Int("policies-to-evaluate", policies.PolicyNum),
 			slog.Int("policies-skipped", policies.SkippedNum),
@@ -302,11 +302,11 @@ func (s *Scanner) ScanClusterWideResources(ctx context.Context, runUID string) e
 
 	workers.Wait()
 	if err := s.policyReportStore.DeleteOldClusterPolicyReports(ctx, runUID); err != nil {
-		s.logger.ErrorContext(context.Background(), "error deleting old ClusterPolicyReports",
+		s.logger.ErrorContext(ctx, "error deleting old ClusterPolicyReports",
 			slog.String("error", err.Error()),
 			slog.String("RunUID", runUID))
 	}
-	s.logger.InfoContext(context.Background(), "Cluster-wide resources scan finished")
+	s.logger.InfoContext(ctx, "Cluster-wide resources scan finished")
 
 	return nil
 }
@@ -319,7 +319,7 @@ type policyAuditResult struct {
 
 //gocognit:ignore
 func (s *Scanner) auditResource(ctx context.Context, policies []*policies.Policy, resource unstructured.Unstructured, runUID string, skippedPoliciesNum, erroredPoliciesNum int) error {
-	s.logger.InfoContext(context.Background(), "audit resource",
+	s.logger.InfoContext(ctx, "audit resource",
 		slog.String("resource", resource.GetName()),
 		slog.Group("dict"),
 		slog.Int("policies-to-evaluate", len(policies)),
@@ -345,7 +345,7 @@ func (s *Scanner) auditResource(ctx context.Context, policies []*policies.Policy
 
 			matches, err := policyMatches(policy, resource)
 			if err != nil {
-				s.logger.ErrorContext(context.Background(), "error matching policy to resource", slog.String("error", err.Error()))
+				s.logger.ErrorContext(ctx, "error matching policy to resource", slog.String("error", err.Error()))
 			}
 
 			if !matches {
@@ -359,7 +359,7 @@ func (s *Scanner) auditResource(ctx context.Context, policies []*policies.Policy
 			if responseErr != nil {
 				errored = true
 				// log responseErr, will end in PolicyReportResult too
-				s.logger.ErrorContext(context.Background(), "error sending AdmissionReview to PolicyServer",
+				s.logger.ErrorContext(ctx, "error sending AdmissionReview to PolicyServer",
 					slog.String("error", responseErr.Error()),
 					slog.Group("response",
 						slog.String("admissionRequest-name", admissionReviewRequest.Request.Name),
@@ -369,7 +369,7 @@ func (s *Scanner) auditResource(ctx context.Context, policies []*policies.Policy
 				admissionReviewResponse.Response.Result.Code == 500 {
 				errored = true
 				// log Result.Message, will end in PolicyReportResult too
-				s.logger.ErrorContext(context.Background(), "error evaluating Policy in PolicyServer", slog.String("error", errors.New(admissionReviewResponse.Response.Result.Message).Error()),
+				s.logger.ErrorContext(ctx, "error evaluating Policy in PolicyServer", slog.String("error", errors.New(admissionReviewResponse.Response.Result.Message).Error()),
 					slog.Group("response",
 						slog.String("admissionRequest-name", admissionReviewRequest.Request.Name),
 						slog.String("policy", policy.GetName()),
@@ -377,7 +377,7 @@ func (s *Scanner) auditResource(ctx context.Context, policies []*policies.Policy
 			}
 
 			if !errored {
-				s.logger.DebugContext(context.Background(), "audit review response",
+				s.logger.DebugContext(ctx, "audit review response",
 					slog.Group("response",
 						slog.String("uid", string(admissionReviewResponse.Response.UID)),
 						slog.String("policy", policy.GetName()),
@@ -405,16 +405,16 @@ func (s *Scanner) auditResource(ctx context.Context, policies []*policies.Policy
 	if s.outputScan {
 		policyReportJSON, err := json.Marshal(policyReport)
 		if err != nil {
-			s.logger.ErrorContext(context.Background(), "error while marshalling PolicyReport to JSON, skipping output scan", slog.String("error", err.Error()))
+			s.logger.ErrorContext(ctx, "error while marshalling PolicyReport to JSON, skipping output scan", slog.String("error", err.Error()))
 		}
 
-		s.logger.InfoContext(context.Background(), "PolicyReport summary", slog.String("report", string(policyReportJSON)))
+		s.logger.InfoContext(ctx, "PolicyReport summary", slog.String("report", string(policyReportJSON)))
 	}
 
 	if !s.disableStore {
 		err := s.policyReportStore.CreateOrPatchPolicyReport(ctx, policyReport)
 		if err != nil {
-			s.logger.ErrorContext(context.Background(), "error adding PolicyReport to store.", slog.String("error", err.Error()))
+			s.logger.ErrorContext(ctx, "error adding PolicyReport to store.", slog.String("error", err.Error()))
 		}
 	}
 
@@ -422,7 +422,7 @@ func (s *Scanner) auditResource(ctx context.Context, policies []*policies.Policy
 }
 
 func (s *Scanner) auditClusterResource(ctx context.Context, policies []*policies.Policy, resource unstructured.Unstructured, runUID string, skippedPoliciesNum, erroredPoliciesNum int) {
-	s.logger.InfoContext(context.Background(), "audit clusterwide resource",
+	s.logger.InfoContext(ctx, "audit clusterwide resource",
 		slog.String("resource", resource.GetName()),
 		slog.Group("dict",
 			slog.Int("policies-to-evaluate", len(policies))))
@@ -436,7 +436,7 @@ func (s *Scanner) auditClusterResource(ctx context.Context, policies []*policies
 
 		matches, err := policyMatches(policy, resource)
 		if err != nil {
-			s.logger.ErrorContext(context.Background(), "error matching policy to resource", slog.String("error", err.Error()))
+			s.logger.ErrorContext(ctx, "error matching policy to resource", slog.String("error", err.Error()))
 		}
 
 		if !matches {
@@ -450,7 +450,7 @@ func (s *Scanner) auditClusterResource(ctx context.Context, policies []*policies
 		if responseErr != nil {
 			errored = true
 			// log error, will end in ClusterPolicyReportResult too
-			s.logger.ErrorContext(context.Background(), "error sending AdmissionReview to PolicyServer", slog.String("error", responseErr.Error()),
+			s.logger.ErrorContext(ctx, "error sending AdmissionReview to PolicyServer", slog.String("error", responseErr.Error()),
 				slog.Group("response",
 					slog.String("admissionRequest name", admissionReviewRequest.Request.Name),
 					slog.String("policy", policy.GetName()),
@@ -459,7 +459,7 @@ func (s *Scanner) auditClusterResource(ctx context.Context, policies []*policies
 			admissionReviewResponse.Response.Result.Code == 500 {
 			errored = true
 			// log Result.Message, will end in PolicyReportResult too
-			s.logger.ErrorContext(context.Background(), "error evaluating Policy in PolicyServer", slog.String("error", errors.New(admissionReviewResponse.Response.Result.Message).Error()),
+			s.logger.ErrorContext(ctx, "error evaluating Policy in PolicyServer", slog.String("error", errors.New(admissionReviewResponse.Response.Result.Message).Error()),
 				slog.Group("response",
 					slog.String("admissionRequest-name", admissionReviewRequest.Request.Name),
 					slog.String("policy", policy.GetName()),
@@ -467,7 +467,7 @@ func (s *Scanner) auditClusterResource(ctx context.Context, policies []*policies
 		}
 
 		if !errored {
-			s.logger.DebugContext(context.Background(), "audit review response",
+			s.logger.DebugContext(ctx, "audit review response",
 				slog.Group("response",
 					slog.String("uid", string(admissionReviewResponse.Response.UID)),
 					slog.String("policy", policy.GetName()),
@@ -481,16 +481,16 @@ func (s *Scanner) auditClusterResource(ctx context.Context, policies []*policies
 	if s.outputScan {
 		clusterPolicyReportJSON, err := json.Marshal(clusterPolicyReport)
 		if err != nil {
-			s.logger.ErrorContext(context.Background(), "error while marshalling ClusterPolicyReport to JSON, skipping output scan", slog.String("error", err.Error()))
+			s.logger.ErrorContext(ctx, "error while marshalling ClusterPolicyReport to JSON, skipping output scan", slog.String("error", err.Error()))
 		}
 
-		s.logger.InfoContext(context.Background(), "ClusterPolicyReport summary", slog.String("report", string(clusterPolicyReportJSON)))
+		s.logger.InfoContext(ctx, "ClusterPolicyReport summary", slog.String("report", string(clusterPolicyReportJSON)))
 	}
 
 	if !s.disableStore {
 		err := s.policyReportStore.CreateOrPatchClusterPolicyReport(ctx, clusterPolicyReport)
 		if err != nil {
-			s.logger.ErrorContext(context.Background(), "error adding ClusterPolicyReport to store", slog.String("error", err.Error()))
+			s.logger.ErrorContext(ctx, "error adding ClusterPolicyReport to store", slog.String("error", err.Error()))
 		}
 	}
 }
